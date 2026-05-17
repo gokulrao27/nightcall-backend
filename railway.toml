@@ -1,9 +1,18 @@
 [build]
+builder = "RAILPACK"
 buildCommand = "npm run build"
+buildEnvironment = "V3"
 
 [deploy]
-preDeployCommand = "node dist/db/migrate.js"
+runtime = "V2"
+numReplicas = 1
 startCommand = "npm start"
 healthcheckPath = "/health"
+preDeployCommand = ["node dist/db/migrate.js"]
+sleepApplication = false
+useLegacyStacker = false
+ipv6EgressEnabled = false
+multiRegionConfig = {"iad":{"numReplicas":1}}
+restartPolicyType = "ON_FAILURE"
 healthcheckTimeout = 30
-restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
