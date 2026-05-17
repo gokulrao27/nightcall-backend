@@ -1,8 +1,12 @@
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
-CREATE TYPE user_tier AS ENUM ('free', 'premium');
+-- Create enum only if it doesn't already exist
+DO $$ BEGIN
+  CREATE TYPE user_tier AS ENUM ('free', 'premium');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   pseudonym       VARCHAR(30) NOT NULL,
   avatar          VARCHAR(30) NOT NULL DEFAULT 'moon',
@@ -21,7 +25,7 @@ CREATE TABLE users (
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE calls (
+CREATE TABLE IF NOT EXISTS calls (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_a          UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   user_b          UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -33,7 +37,7 @@ CREATE TABLE calls (
   ended_by        VARCHAR(10) CHECK (ended_by IN ('timer','user_a','user_b','system'))
 );
 
-CREATE TABLE words (
+CREATE TABLE IF NOT EXISTS words (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   call_id         UUID REFERENCES calls(id) ON DELETE SET NULL,
@@ -41,7 +45,7 @@ CREATE TABLE words (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE wall_posts (
+CREATE TABLE IF NOT EXISTS wall_posts (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   call_id         UUID REFERENCES calls(id) ON DELETE SET NULL,
@@ -52,7 +56,7 @@ CREATE TABLE wall_posts (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE reports (
+CREATE TABLE IF NOT EXISTS reports (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   reporter_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   reported_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -62,7 +66,7 @@ CREATE TABLE reports (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE subscriptions (
+CREATE TABLE IF NOT EXISTS subscriptions (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   stripe_customer_id  VARCHAR(255) UNIQUE,
@@ -73,21 +77,21 @@ CREATE TABLE subscriptions (
   cancelled_at        TIMESTAMPTZ
 );
 
-CREATE TABLE conversation_prompts (
+CREATE TABLE IF NOT EXISTS conversation_prompts (
   id      SERIAL PRIMARY KEY,
-  body    TEXT NOT NULL,
+  body    TEXT NOT NULL UNIQUE,
   active  BOOLEAN NOT NULL DEFAULT TRUE
 );
 
 -- Indexes
-CREATE INDEX idx_calls_user_a ON calls(user_a);
-CREATE INDEX idx_calls_user_b ON calls(user_b);
-CREATE INDEX idx_calls_started ON calls(started_at DESC);
-CREATE INDEX idx_wall_created ON wall_posts(created_at DESC) WHERE is_approved = TRUE;
-CREATE INDEX idx_words_user ON words(user_id, created_at DESC);
-CREATE INDEX idx_reports_reported ON reports(reported_id, reviewed);
+CREATE INDEX IF NOT EXISTS idx_calls_user_a   ON calls(user_a);
+CREATE INDEX IF NOT EXISTS idx_calls_user_b   ON calls(user_b);
+CREATE INDEX IF NOT EXISTS idx_calls_started  ON calls(started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_wall_created   ON wall_posts(created_at DESC) WHERE is_approved = TRUE;
+CREATE INDEX IF NOT EXISTS idx_words_user     ON words(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_reports_reported ON reports(reported_id, reviewed);
 
--- Seed conversation prompts
+-- Seed conversation prompts (ON CONFLICT DO NOTHING — safe to re-run)
 INSERT INTO conversation_prompts (body) VALUES
   ('What''s something you''ve been carrying alone that you wish someone knew?'),
   ('What would you do differently if no one was watching?'),
@@ -98,4 +102,5 @@ INSERT INTO conversation_prompts (body) VALUES
   ('What would you tell the version of you from 5 years ago?'),
   ('What does your life sound like at 3AM when you''re honest?'),
   ('Who do you miss that you''ll never tell?'),
-  ('What''s the story you keep rewriting in your head?');
+  ('What''s the story you keep rewriting in your head?')
+ON CONFLICT (body) DO NOTHING;

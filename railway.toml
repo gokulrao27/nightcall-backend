@@ -1,0 +1,9 @@
+[build]
+buildCommand = "npm run build"
+
+[deploy]
+preDeployCommand = "node dist/db/migrate.js"
+startCommand = "npm start"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"

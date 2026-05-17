@@ -3,7 +3,8 @@ import path from 'path';
 import { pool } from './pool';
 
 async function migrate(): Promise<void> {
-  const sql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
+  // Use process.cwd() so this works both from dist/ (prod) and src/ (dev)
+  const sql = fs.readFileSync(path.join(process.cwd(), 'src', 'db', 'schema.sql'), 'utf-8');
   await pool.query(sql);
   console.log('Migration complete');
   await pool.end();
