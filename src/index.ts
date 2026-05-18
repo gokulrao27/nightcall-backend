@@ -47,7 +47,7 @@ app.use(
   }),
 );
 app.use(pinoHttp({ logger }));
-app.options('*', cors());
+app.options('/{*path}', cors());
 
 // Stripe webhook must receive raw body — mount before express.json()
 app.use('/webhook', express.raw({ type: 'application/json' }));
