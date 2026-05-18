@@ -4,7 +4,8 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config';
 import { logger } from '../logger';
 import { handleSignaling } from './signaling';
-import { handleMatchmaking } from './matchmaking';
+import { handleMatchmaking, endCall } from './matchmaking';
+import { redis } from '../redis/client';
 
 export interface NightSocket extends WebSocket {
   uid: string;
@@ -93,6 +94,10 @@ export function setupWebSocket(server: HttpServer): void {
 
     ws.on('close', () => {
       sockets.delete(ws.uid);
+      // End any active call this user was in so the peer isn't stranded
+      redis.get(`user:${ws.uid}:room`).then((roomId) => {
+        if (roomId) endCall(roomId, 'system').catch((err) => logger.error(err, 'room cleanup on disconnect error'));
+      }).catch((err) => logger.error(err, 'redis lookup on disconnect error'));
       handleMatchmaking(ws, 'leave').catch((err) => logger.error(err, 'cleanup error'));
       logger.debug({ uid: ws.uid }, 'WebSocket disconnected');
     });

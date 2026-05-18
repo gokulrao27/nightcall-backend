@@ -11,35 +11,18 @@ usersRouter.get('/', requireAuth, async (req, res: Response, next: NextFunction)
   try {
     const uid = (req as AuthRequest).uid;
 
-    const [userResult, statsResult] = await Promise.all([
-      pool.query(
-        `SELECT id, pseudonym, avatar, timezone, tier, email, created_at
-         FROM users WHERE id = $1`,
-        [uid],
-      ),
-      pool.query(
-        `SELECT
-           COUNT(DISTINCT c.id)::int                                           AS total_calls,
-           COALESCE(SUM(c.duration_secs), 0)::int / 60                        AS total_minutes,
-           COUNT(DISTINCT w.id)::int                                           AS total_words,
-           (SELECT COUNT(DISTINCT COALESCE(c2.country_a, c2.country_b))
-            FROM calls c2
-            WHERE (c2.user_a = u.id OR c2.user_b = u.id)
-              AND c2.country_a IS NOT NULL)::int                               AS countries_reached
-         FROM users u
-         LEFT JOIN calls c ON (c.user_a = u.id OR c.user_b = u.id)
-         LEFT JOIN words w ON w.user_id = u.id
-         WHERE u.id = $1`,
-        [uid],
-      ),
-    ]);
+    const userResult = await pool.query(
+      `SELECT id, pseudonym, avatar, timezone, tier, streak
+       FROM users WHERE id = $1`,
+      [uid],
+    );
 
     if (!userResult.rows[0]) {
       res.status(404).json({ error: 'User not found' });
       return;
     }
 
-    res.json({ user: userResult.rows[0], stats: statsResult.rows[0] });
+    res.json(userResult.rows[0]);
   } catch (err) {
     next(err);
   }

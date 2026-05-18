@@ -53,7 +53,7 @@ callsRouter.post('/end', requireAuth, callRateLimit, async (req, res: Response, 
       return;
     }
 
-    await endCall(roomId, 'user');
+    await endCall(roomId, 'system');
     res.json({ ok: true });
   } catch (err) {
     next(err);

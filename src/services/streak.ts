@@ -34,7 +34,7 @@ export async function updateStreak(userId: string): Promise<void> {
       `UPDATE users SET badges = array_append(badges, $1) WHERE id = $2`,
       [milestone, userId],
     );
-    sendToUser(userId, { type: 'badge:unlocked', badge: milestone, streak: newStreak });
+    sendToUser(userId, { type: 'badge:unlocked', payload: { badge: milestone, streak: newStreak } });
   }
 }
 

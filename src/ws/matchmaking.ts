@@ -36,7 +36,7 @@ export async function handleMatchmaking(
   }
 
   if (!isWindowOpen(user.timezone)) {
-    sendToUser(ws.uid, { type: 'queue:closed', message: 'Line is not open yet' });
+    sendToUser(ws.uid, { type: 'queue:closed', payload: { message: 'Line is not open yet' } });
     return;
   }
 
@@ -51,7 +51,7 @@ export async function handleMatchmaking(
   const todayCount = (countResult.rows[0] as { count: number }).count;
 
   if (todayCount >= limit) {
-    sendToUser(ws.uid, { type: 'queue:limit_reached' });
+    sendToUser(ws.uid, { type: 'queue:limit_reached', payload: {} });
     return;
   }
 
@@ -73,7 +73,7 @@ export async function handleMatchmaking(
     // No one waiting — join the queue
     await redis.rpush(QUEUE_KEY, ws.uid);
     await redis.expire(QUEUE_KEY, 3600);
-    sendToUser(ws.uid, { type: 'queue:waiting' });
+    sendToUser(ws.uid, { type: 'queue:waiting', payload: {} });
     return;
   }
 
@@ -97,14 +97,9 @@ export async function handleMatchmaking(
     redis.setex(`user:${ws.uid}:room`, CALL_DURATION + 60, roomId),
   ]);
 
-  const matchPayload = {
-    type: 'queue:matched',
-    roomId,
-    prompt: prompt?.body ?? null,
-  };
-
-  sendToUser(peerId, matchPayload);
-  sendToUser(ws.uid, matchPayload);
+  // Send different isInitiator roles: the waiting peer sends the SDP offer
+  sendToUser(peerId, { type: 'queue:matched', payload: { roomId, prompt: prompt?.body ?? null, isInitiator: true } });
+  sendToUser(ws.uid,  { type: 'queue:matched', payload: { roomId, prompt: prompt?.body ?? null, isInitiator: false } });
 
   logger.info({ roomId, userA: peerId, userB: ws.uid }, 'Call matched');
 
@@ -143,9 +138,8 @@ export async function endCall(roomId: string, reason: string): Promise<void> {
     `user:${userB}:room`,
   );
 
-  const endPayload = { type: 'call:ended', reason };
-  sendToUser(userA, endPayload);
-  sendToUser(userB, endPayload);
+  sendToUser(userA, { type: 'call:ended', payload: { reason } });
+  sendToUser(userB, { type: 'call:ended', payload: { reason } });
 
   await Promise.allSettled([
     updateStreak(userA),
