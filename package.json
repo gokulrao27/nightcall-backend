@@ -10,7 +10,8 @@
     "check": "tsc --noEmit",
     "test": "vitest run",
     "db:migrate": "ts-node src/db/migrate.ts",
-    "db:migrate46": "ts-node src/db/migrate46.ts"
+    "db:migrate46": "ts-node src/db/migrate46.ts",
+    "db:migrate003": "ts-node -e \"require('./src/db/pool').pool.query(require('fs').readFileSync('./src/db/migrations/003_wall_likes.sql','utf8')).then(()=>{console.log('Done');process.exit(0);}).catch(e=>{console.error(e);process.exit(1);})\""
   },
   "license": "MIT",
   "dependencies": {

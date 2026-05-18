@@ -85,5 +85,36 @@ export function startCronJobs(): void {
     );
   });
 
+  // 8:30 AM — "Someone liked your post"
+  cron.schedule('30 8 * * *', async () => {
+    logger.info('Cron: sending wall likes notifications');
+    const results = await pool.query(`
+      SELECT
+        wp.user_id,
+        COUNT(wl.id)::int AS new_likes,
+        u.push_endpoint,
+        u.push_keys
+      FROM wall_likes wl
+      JOIN wall_posts wp ON wp.id = wl.post_id
+      JOIN users u ON u.id = wp.user_id
+      WHERE wl.created_at > NOW() - INTERVAL '24 hours'
+        AND u.push_endpoint IS NOT NULL
+        AND wp.user_id != wl.user_id
+      GROUP BY wp.user_id, u.push_endpoint, u.push_keys
+      HAVING COUNT(wl.id) > 0
+    `);
+    await Promise.allSettled(
+      results.rows.map((r: { push_endpoint: string; push_keys: { p256dh: string; auth: string }; new_likes: number }) =>
+        webpush.sendNotification(
+          { endpoint: r.push_endpoint, keys: r.push_keys },
+          JSON.stringify({
+            title: 'Your Wall post got noticed.',
+            body: `${r.new_likes} ${r.new_likes === 1 ? 'person' : 'people'} connected with what you wrote last night.`,
+          }),
+        ).catch(() => {}),
+      ),
+    );
+  });
+
   logger.info('Cron jobs started');
 }
