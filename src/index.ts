@@ -25,7 +25,22 @@ const app = express();
 const server = http.createServer(app);
 
 app.use(helmet());
-app.use(cors({ origin: config.FRONTEND_URL, credentials: true }));
+
+// Support comma-separated allowed origins (e.g. "https://app.vercel.app,http://localhost:5173")
+const allowedOrigins = config.FRONTEND_URL.split(',').map((s) => s.trim()).filter(Boolean);
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow server-to-server requests (no origin) and listed origins
+      if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(null, false);
+      }
+    },
+    credentials: true,
+  }),
+);
 app.use(pinoHttp({ logger }));
 
 // Stripe webhook must receive raw body — mount before express.json()

@@ -43,6 +43,16 @@ wallRouter.post('/', requireAuth, wallRateLimit, async (req, res: Response, next
     const uid = (req as AuthRequest).uid;
     const { body, callId } = WallPostSchema.parse(req.body);
 
+    // One confession per calendar day (UTC) per user
+    const dayCheck = await pool.query(
+      `SELECT id FROM wall_posts WHERE user_id = $1 AND created_at >= CURRENT_DATE`,
+      [uid],
+    );
+    if (dayCheck.rows.length >= 1) {
+      res.status(429).json({ error: 'confession_limit', message: 'One confession per night — come back tomorrow' });
+      return;
+    }
+
     const { passed, reason } = moderateText(body);
     if (!passed) {
       res.status(422).json({ error: 'Content violates community guidelines', reason });
