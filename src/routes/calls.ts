@@ -6,6 +6,7 @@ import { requireAuth, AuthRequest } from '../middleware/auth';
 import { callRateLimit } from '../middleware/ratelimit';
 import { endCall } from '../ws/matchmaking';
 import { config } from '../config';
+import { logger } from '../logger';
 
 export const callsRouter = Router();
 
@@ -63,17 +64,40 @@ callsRouter.post('/end', requireAuth, callRateLimit, async (req, res: Response, 
 // GET /call/ice-config — TURN server credentials for WebRTC
 callsRouter.get('/ice-config', requireAuth, async (_req, res: Response, next: NextFunction) => {
   try {
-    if (config.METERED_API_KEY) {
-      const meteredRes = await fetch(
-        `https://nighttalks.metered.live/api/v1/turn/credentials?apiKey=${config.METERED_API_KEY}`
-      );
-      if (!meteredRes.ok) throw new Error(`Metered API error: ${meteredRes.status}`);
-      const iceServers = await meteredRes.json();
-      res.json({ iceServers });
+    // Strategy 1: Fetch live credentials from Metered REST API
+    if (config.METERED_API_KEY && config.METERED_DOMAIN) {
+      try {
+        const meteredRes = await fetch(
+          `https://${config.METERED_DOMAIN}/api/v1/turn/credentials?apiKey=${config.METERED_API_KEY}`
+        );
+        if (meteredRes.ok) {
+          const iceServers = await meteredRes.json() as unknown[];
+          res.json(iceServers);
+          return;
+        }
+      } catch (fetchErr) {
+        logger.warn({ fetchErr }, 'Metered API fetch failed, falling back to static credentials');
+      }
+    }
+
+    // Strategy 2: Static credentials from env vars
+    if (config.TURN_USERNAME && config.TURN_CREDENTIAL) {
+      res.json([
+        { urls: 'stun:stun.relay.metered.ca:80' },
+        { urls: 'turn:global.relay.metered.ca:80',                 username: config.TURN_USERNAME, credential: config.TURN_CREDENTIAL },
+        { urls: 'turn:global.relay.metered.ca:80?transport=tcp',   username: config.TURN_USERNAME, credential: config.TURN_CREDENTIAL },
+        { urls: 'turn:global.relay.metered.ca:443',                username: config.TURN_USERNAME, credential: config.TURN_CREDENTIAL },
+        { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username: config.TURN_USERNAME, credential: config.TURN_CREDENTIAL },
+      ]);
       return;
     }
 
-    res.json({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    // Strategy 3: STUN only (last resort)
+    logger.warn('No TURN credentials configured — returning STUN only');
+    res.json([
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+    ]);
   } catch (err) {
     next(err);
   }

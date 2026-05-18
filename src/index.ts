@@ -47,14 +47,25 @@ app.use(
   }),
 );
 app.use(pinoHttp({ logger }));
+app.options('*', cors());
 
 // Stripe webhook must receive raw body — mount before express.json()
 app.use('/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '10kb' }));
 
-// Health check
+// Health + diagnostics
 app.get('/health', (_req, res) => {
   res.json({ ok: true, ts: new Date().toISOString() });
+});
+
+app.get('/ping', (_req, res) => {
+  res.json({
+    ok: true,
+    ts: new Date().toISOString(),
+    env: config.NODE_ENV,
+    turnConfigured: !!(config.TURN_USERNAME || config.METERED_API_KEY),
+    cors: config.FRONTEND_URL,
+  });
 });
 
 // Routes
