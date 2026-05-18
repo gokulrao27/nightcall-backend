@@ -15,9 +15,14 @@ import { wallRouter } from './routes/wall';
 import { reportsRouter } from './routes/reports';
 import { pushRouter } from './routes/push';
 import { stripeRouter } from './routes/stripe';
+import { verifyRouter } from './routes/verify';
+import { usernameRouter } from './routes/username';
+import { confessionsRouter } from './routes/confessions';
+import { statsRouter } from './routes/stats';
 import { errorHandler } from './middleware/error';
 import { setupWebSocket } from './ws/server';
 import { configureWebPush } from './services/webpush';
+import { startCronJobs } from './services/cron';
 
 configureWebPush();
 
@@ -62,6 +67,10 @@ app.use('/report', reportsRouter);
 app.use('/push', pushRouter);
 // Stripe routes handle both /subscription/checkout and /webhook internally
 app.use('/', stripeRouter);
+app.use('/verify',     verifyRouter);
+app.use('/username',   usernameRouter);
+app.use('/confession', confessionsRouter);
+app.use('/stats',      statsRouter);
 
 app.use(errorHandler);
 
@@ -77,6 +86,8 @@ server.listen(PORT, '0.0.0.0', async () => {
   } catch (err) {
     logger.error(err, 'PostgreSQL connection failed');
   }
+
+  startCronJobs();
 
   try {
     await redis.ping();

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { pool } from '../db/pool';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 
+
 export const usersRouter = Router();
 
 // GET /me
@@ -20,7 +21,11 @@ usersRouter.get('/', requireAuth, async (req, res: Response, next: NextFunction)
         `SELECT
            COUNT(DISTINCT c.id)::int                                           AS total_calls,
            COALESCE(SUM(c.duration_secs), 0)::int / 60                        AS total_minutes,
-           COUNT(DISTINCT w.id)::int                                           AS total_words
+           COUNT(DISTINCT w.id)::int                                           AS total_words,
+           (SELECT COUNT(DISTINCT COALESCE(c2.country_a, c2.country_b))
+            FROM calls c2
+            WHERE (c2.user_a = u.id OR c2.user_b = u.id)
+              AND c2.country_a IS NOT NULL)::int                               AS countries_reached
          FROM users u
          LEFT JOIN calls c ON (c.user_a = u.id OR c.user_b = u.id)
          LEFT JOIN words w ON w.user_id = u.id
@@ -75,6 +80,42 @@ usersRouter.put('/', requireAuth, async (req, res: Response, next: NextFunction)
     );
 
     res.json({ user: result.rows[0] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /me/username — change pseudonym (once per 7 days)
+usersRouter.put('/username', requireAuth, async (req: any, res: Response, next: NextFunction) => {
+  try {
+    const { pseudonym } = z.object({
+      pseudonym: z.string().min(3).max(20).regex(/^[a-zA-Z0-9_]+$/),
+    }).parse(req.body);
+
+    const user = await pool.query(
+      `SELECT username_changed_at FROM users WHERE id = $1`, [req.uid],
+    );
+    const lastChange = user.rows[0]?.username_changed_at;
+    if (lastChange) {
+      const daysSince = (Date.now() - new Date(lastChange).getTime()) / 86400000;
+      if (daysSince < 7) {
+        return res.status(400).json({
+          error: 'Username can only be changed once every 7 days',
+          daysRemaining: Math.ceil(7 - daysSince),
+        });
+      }
+    }
+
+    const taken = await pool.query(
+      `SELECT 1 FROM users WHERE LOWER(pseudonym)=LOWER($1) AND id != $2`, [pseudonym, req.uid],
+    );
+    if (taken.rows.length) return res.status(409).json({ error: 'Username taken' });
+
+    await pool.query(
+      `UPDATE users SET pseudonym=$1, username_changed_at=NOW() WHERE id=$2`,
+      [pseudonym, req.uid],
+    );
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

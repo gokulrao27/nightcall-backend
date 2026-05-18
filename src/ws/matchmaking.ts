@@ -3,6 +3,7 @@ import { pool } from '../db/pool';
 import { logger } from '../logger';
 import { sendToUser, NightSocket } from './server';
 import { v4 as uuidv4 } from 'uuid';
+import { updateStreak } from '../services/streak';
 
 const QUEUE_KEY = 'nightcall:queue';
 const CALL_DURATION = 600; // 10 minutes in seconds
@@ -145,6 +146,11 @@ export async function endCall(roomId: string, reason: string): Promise<void> {
   const endPayload = { type: 'call:ended', reason };
   sendToUser(userA, endPayload);
   sendToUser(userB, endPayload);
+
+  await Promise.allSettled([
+    updateStreak(userA),
+    updateStreak(userB),
+  ]);
 
   logger.info({ roomId, reason }, 'Call ended');
 }
