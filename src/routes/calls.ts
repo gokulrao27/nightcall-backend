@@ -1,5 +1,6 @@
 import { Router, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import crypto from 'crypto';
 import { pool } from '../db/pool';
 import { redis } from '../redis/client';
 import { requireAuth, AuthRequest } from '../middleware/auth';
@@ -63,17 +64,27 @@ callsRouter.post('/end', requireAuth, callRateLimit, async (req, res: Response, 
 // GET /call/ice-config — TURN server credentials for WebRTC
 callsRouter.get('/ice-config', requireAuth, async (_req, res: Response, next: NextFunction) => {
   try {
-    const iceServers = [
+    const iceServers: object[] = [
       { urls: 'stun:stun.l.google.com:19302' },
     ];
 
-    if (config.TURN_URLS && config.TURN_USERNAME && config.TURN_CREDENTIAL) {
-      iceServers.push({
-        urls: config.TURN_URLS,
-        // @ts-expect-error — iceServers type is minimal; TURN fields are valid WebRTC config
-        username: config.TURN_USERNAME,
-        credential: config.TURN_CREDENTIAL,
-      });
+    if (config.TURN_DOMAIN && config.TURN_SECRET) {
+      // Metered HMAC time-limited credentials (valid 24 h)
+      const expiry = Math.floor(Date.now() / 1000) + 86400;
+      const username = String(expiry);
+      const credential = crypto
+        .createHmac('sha1', config.TURN_SECRET)
+        .update(username)
+        .digest('base64');
+
+      const d = config.TURN_DOMAIN;
+      iceServers.push(
+        { urls: `stun:${d}`, username, credential },
+        { urls: `turn:${d}:80?transport=udp`, username, credential },
+        { urls: `turn:${d}:80?transport=tcp`, username, credential },
+        { urls: `turn:${d}:443?transport=tcp`, username, credential },
+        { urls: `turns:${d}:443?transport=tcp`, username, credential },
+      );
     }
 
     res.json({ iceServers });
