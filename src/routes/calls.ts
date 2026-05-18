@@ -1,6 +1,5 @@
 import { Router, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import crypto from 'crypto';
 import { pool } from '../db/pool';
 import { redis } from '../redis/client';
 import { requireAuth, AuthRequest } from '../middleware/auth';
@@ -64,30 +63,17 @@ callsRouter.post('/end', requireAuth, callRateLimit, async (req, res: Response, 
 // GET /call/ice-config — TURN server credentials for WebRTC
 callsRouter.get('/ice-config', requireAuth, async (_req, res: Response, next: NextFunction) => {
   try {
-    const iceServers: object[] = [
-      { urls: 'stun:stun.l.google.com:19302' },
-    ];
-
-    if (config.TURN_DOMAIN && config.TURN_SECRET) {
-      // Metered HMAC time-limited credentials (valid 24 h)
-      const expiry = Math.floor(Date.now() / 1000) + 86400;
-      const username = String(expiry);
-      const credential = crypto
-        .createHmac('sha1', config.TURN_SECRET)
-        .update(username)
-        .digest('base64');
-
-      const d = config.TURN_DOMAIN;
-      iceServers.push(
-        { urls: `stun:${d}`, username, credential },
-        { urls: `turn:${d}:80?transport=udp`, username, credential },
-        { urls: `turn:${d}:80?transport=tcp`, username, credential },
-        { urls: `turn:${d}:443?transport=tcp`, username, credential },
-        { urls: `turns:${d}:443?transport=tcp`, username, credential },
+    if (config.METERED_API_KEY) {
+      const meteredRes = await fetch(
+        `https://nighttalks.metered.live/api/v1/turn/credentials?apiKey=${config.METERED_API_KEY}`
       );
+      if (!meteredRes.ok) throw new Error(`Metered API error: ${meteredRes.status}`);
+      const iceServers = await meteredRes.json();
+      res.json({ iceServers });
+      return;
     }
 
-    res.json({ iceServers });
+    res.json({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
   } catch (err) {
     next(err);
   }
