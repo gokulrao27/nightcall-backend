@@ -83,9 +83,23 @@ app.use('/username',   usernameRouter);
 app.use('/confession', confessionsRouter);
 app.use('/stats',      statsRouter);
 
+app.get('/ws-test', (req, res) => {
+  res.json({
+    ok: true,
+    message: 'WebSocket server is mounted at /ws on this same server',
+    wsUrl: `wss://${req.headers.host ?? 'unknown'}/ws`,
+    hint: 'If HTTP works but WS fails, check Railway does not strip Upgrade headers',
+  });
+});
+
 app.use(errorHandler);
 
-// WebSocket server
+// Log every HTTP→WS upgrade request so Railway forwarding can be confirmed in logs
+server.on('upgrade', (request) => {
+  logger.info({ url: request.url }, 'WS: HTTP upgrade request received');
+});
+
+// WebSocket server — must be before server.listen()
 setupWebSocket(server);
 
 const PORT = parseInt(config.PORT, 10);
@@ -95,17 +109,17 @@ server.listen(PORT, '0.0.0.0', async () => {
     await pool.query('SELECT 1');
     logger.info('PostgreSQL connected');
   } catch (err) {
-    logger.error(err, 'PostgreSQL connection failed');
+    logger.error({ err }, 'PostgreSQL connection failed — continuing anyway');
   }
-
-  startCronJobs();
 
   try {
     await redis.ping();
     logger.info('Redis connected');
   } catch (err) {
-    logger.error(err, 'Redis connection failed');
+    logger.error({ err }, 'Redis connection failed — continuing anyway');
   }
+
+  if (config.NODE_ENV === 'production') startCronJobs();
 
   logger.info({ port: PORT }, 'NightCall backend running');
 });

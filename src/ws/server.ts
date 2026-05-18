@@ -35,9 +35,14 @@ export function setupWebSocket(server: HttpServer): void {
 
   wss.on('close', () => clearInterval(interval));
 
+  wss.on('error', (err) => {
+    logger.error({ err }, 'WS: server error');
+  });
+
   wss.on('connection', (rawWs, req) => {
     const ws = rawWs as NightSocket;
     ws.isAlive = true;
+    logger.info({ ip: req.socket.remoteAddress, url: req.url }, 'WS: new connection attempt');
 
     ws.on('pong', () => {
       ws.isAlive = true;
@@ -107,7 +112,7 @@ export function setupWebSocket(server: HttpServer): void {
     });
   });
 
-  logger.info('WebSocket server ready at /ws');
+  logger.info('WebSocket server ready at /ws — listening for upgrades');
 }
 
 export function sendToUser(uid: string, msg: object): void {
